@@ -20,25 +20,42 @@ COMMON_YOUTUBE_OPTS = {
     'socket_timeout': 30,
     'extractor_args': {
         'youtube': {
-            'player_client': ['mweb', 'android', 'web']
+            'player_client': ['mweb', 'android', 'web', 'ios', 'tv']
         }
     }
 }
 
 
 def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
-    """YouTube videosi haqida ma'lumotlarni sinxron va o'ta tezkor olish."""
+    """YouTube videosi haqida ma'lumotlarni 2 bosqichli zaxira bilan olish."""
+    # 1-urinish: Standart ma'lumot yig'ish
     ydl_opts = {
+        **COMMON_YOUTUBE_OPTS,
+        'skip_download': True,
+        'noplaylist': True,
+        'socket_timeout': 15,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info and ('title' in info or 'id' in info):
+                return info
+    except Exception as e:
+        print(f"[WARN] Standard extract_info failed: {e}")
+
+    # 2-urinish: Flat mode zaxirasi
+    ydl_opts_flat = {
         **COMMON_YOUTUBE_OPTS,
         'skip_download': True,
         'extract_flat': 'in_playlist',
         'noplaylist': True,
+        'socket_timeout': 15,
     }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_flat) as ydl:
             return ydl.extract_info(url, download=False)
     except Exception as e:
-        print(f"[ERROR] extract_info: {e}")
+        print(f"[ERROR] Flat extract_info failed: {e}")
         return None
 
 
@@ -75,7 +92,7 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
             }]
     else:
         h = quality if quality.isdigit() else "720"
-        # Telegram pleerida to'g'ri ijro etilishi uchun H.264 (avc1) kodekini tanlash
+        # Telegram pleyerida to'g'ri ijro etilishi uchun H.264 (avc1) kodekini tanlash
         fmt = (
             f'bestvideo[height<={h}][vcodec^=avc1][filesize<=50M]+bestaudio[acodec^=mp4a]/'
             f'best[height<={h}][vcodec^=avc1][filesize<=50M]/'

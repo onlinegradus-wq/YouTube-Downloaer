@@ -2,5 +2,5 @@ aiogram>=3.3.0
 yt-dlp>=2024.3.10
 python-dotenv>=1.0.0
 imageio-ffmpeg>=0.5.0
-py_mini_racer>=0.6.0
-nodejs-wheel-binaries>=22.0.0
+pytubefix>=10.10.1
+quickjs>=1.19.0

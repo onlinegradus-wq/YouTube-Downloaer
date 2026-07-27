@@ -1,6 +1,9 @@
 import asyncio
 import os
 import glob
+import urllib.request
+import json
+import re
 from typing import Dict, Any, Optional, Tuple, List
 from pytubefix import YouTube
 import yt_dlp
@@ -28,14 +31,39 @@ COMMON_YOUTUBE_OPTS = {
 
 
 def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
-    """YouTube videosi ma'lumotlarini olish (pytubefix birinchi, yt-dlp zaxira)."""
-    # 1-urinish: pytubefix (default client)
+    """YouTube videosi ma'lumotlarini rasmiy oEmbed API, pytubefix va yt-dlp o'rtasida 100% zaxira bilan olish."""
+    v_match = re.search(r'(?:v=|shorts/|youtu\.be/)([\w-]+)', url)
+    video_id = v_match.group(1) if v_match else None
+
+    # 1-urinish: YouTube Rasmiy oEmbed API (Cheklovlarsiz va o'ta tezkor)
+    if video_id:
+        oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        try:
+            req = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=8) as res:
+                data = json.loads(res.read().decode())
+                if data and 'title' in data:
+                    return {
+                        'id': video_id,
+                        'title': data.get('title'),
+                        'duration': 0,
+                        'uploader': data.get('author_name', 'YouTube'),
+                        'view_count': 0,
+                        'like_count': 0,
+                        'thumbnail': data.get('thumbnail_url') or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                        'url': f"https://www.youtube.com/watch?v={video_id}",
+                        '_source': 'oembed'
+                    }
+        except Exception as e:
+            print(f"[WARN] oEmbed extract failed: {e}")
+
+    # 2-urinish: pytubefix (default client)
     try:
         yt = YouTube(url)
-        video_id = yt.video_id
-        if video_id and yt.title:
+        v_id = yt.video_id
+        if v_id and yt.title:
             return {
-                'id': video_id,
+                'id': v_id,
                 'title': yt.title,
                 'duration': yt.length,
                 'uploader': yt.author,
@@ -48,13 +76,13 @@ def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[WARN] pytubefix primary extract failed: {e}")
 
-    # 2-urinish: pytubefix (MWEB client)
+    # 3-urinish: pytubefix (MWEB client)
     try:
         yt = YouTube(url, client='MWEB')
-        video_id = yt.video_id
-        if video_id and yt.title:
+        v_id = yt.video_id
+        if v_id and yt.title:
             return {
-                'id': video_id,
+                'id': v_id,
                 'title': yt.title,
                 'duration': yt.length,
                 'uploader': yt.author,
@@ -67,7 +95,7 @@ def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[WARN] pytubefix mweb extract failed: {e}")
 
-    # 3-urinish: yt-dlp zaxirasi
+    # 4-urinish: yt-dlp zaxirasi
     opts_primary = {
         'quiet': True,
         'no_warnings': True,

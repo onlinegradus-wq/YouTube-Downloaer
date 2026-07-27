@@ -15,7 +15,8 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardButton, FSInputFile,
-    InlineQuery, InlineQueryResultArticle, InputTextMessageContent
+    InlineQuery, InlineQueryResultArticle, InputTextMessageContent,
+    KeyboardButton
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from aiogram.fsm.context import FSMContext

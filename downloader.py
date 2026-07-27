@@ -7,7 +7,7 @@ import re
 from typing import Dict, Any, Optional, Tuple, List
 from pytubefix import YouTube
 import yt_dlp
-from config import DOWNLOAD_DIR
+from config import DOWNLOAD_DIR, BASE_DIR, COOKIES_PATH
 
 # imageio_ffmpeg orqali avtomatik FFmpeg joylashuvini aniqlash
 FFMPEG_PATH = None
@@ -24,10 +24,13 @@ COMMON_YOUTUBE_OPTS = {
     'socket_timeout': 30,
     'extractor_args': {
         'youtube': {
-            'player_client': ['mweb', 'android', 'ios']
+            'player_client': ['android', 'ios', 'mweb', 'web']
         }
     }
 }
+
+if os.path.exists(COOKIES_PATH) and os.path.getsize(COOKIES_PATH) > 0:
+    COMMON_YOUTUBE_OPTS['cookiefile'] = COOKIES_PATH
 
 
 def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
@@ -214,7 +217,7 @@ async def trim_video(url: str, start_sec: int, end_sec: int, quality: str = "720
 
 
 def _download_media_sync(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:
-    """Videoni yoki audioni yuklab olish (MWEB, WEB, IOS, ANDROID pytubefix miyasi bilan)."""
+    """Videoni yoki audioni yuklab olish (MWEB, WEB, IOS, ANDROID pytubefix va yt-dlp cookie bilan)."""
     clients = ['MWEB', 'WEB', 'IOS', 'ANDROID']
     title = "YouTube Video"
 
@@ -233,18 +236,13 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
                     return target_file, title, "SUCCESS"
             else:
                 target_res = f"{quality}p" if quality.isdigit() else "720p"
-                # 1. Tanlangan sifatli progressive stream
                 stream = yt.streams.filter(res=target_res, progressive=True).first()
-                # 2. Har qanday mp4 progressive stream
                 if not stream:
                     stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
-                # 3. Har qanday progressive stream
                 if not stream:
                     stream = yt.streams.filter(progressive=True).first()
-                # 4. Tanlangan sifatli har qanday stream
                 if not stream:
                     stream = yt.streams.filter(res=target_res).first()
-                # 5. Har qanday birinchi stream
                 if not stream:
                     stream = yt.streams.first()
 

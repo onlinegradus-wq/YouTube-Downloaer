@@ -10,6 +10,12 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0")) if os.getenv("ADMIN_ID", "").isdigit(
 # Yuklangan fayllar saqlanadigan papka
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
+COOKIES_PATH = os.path.join(BASE_DIR, "cookies.txt")
 
-# Yuklamalar papkasini hosil qilish
+# Agar .env da COOKIES_TEXT bo'lsa, cookies.txt fayliga saqlash
+COOKIES_TEXT = os.getenv("COOKIES_TEXT", "").strip()
+if COOKIES_TEXT:
+    with open(COOKIES_PATH, "w", encoding="utf-8") as f:
+        f.write(COOKIES_TEXT)
+
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)

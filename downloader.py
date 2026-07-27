@@ -57,26 +57,7 @@ def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
         except Exception as e:
             print(f"[WARN] oEmbed extract failed: {e}")
 
-    # 2-urinish: pytubefix (default client)
-    try:
-        yt = YouTube(url)
-        v_id = yt.video_id
-        if v_id and yt.title:
-            return {
-                'id': v_id,
-                'title': yt.title,
-                'duration': yt.length,
-                'uploader': yt.author,
-                'view_count': yt.views,
-                'like_count': 0,
-                'thumbnail': yt.thumbnail_url,
-                'url': url,
-                '_source': 'pytubefix'
-            }
-    except Exception as e:
-        print(f"[WARN] pytubefix primary extract failed: {e}")
-
-    # 3-urinish: pytubefix (MWEB client)
+    # 2-urinish: pytubefix (MWEB client)
     try:
         yt = YouTube(url, client='MWEB')
         v_id = yt.video_id
@@ -94,6 +75,25 @@ def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
             }
     except Exception as e:
         print(f"[WARN] pytubefix mweb extract failed: {e}")
+
+    # 3-urinish: pytubefix (default client)
+    try:
+        yt = YouTube(url)
+        v_id = yt.video_id
+        if v_id and yt.title:
+            return {
+                'id': v_id,
+                'title': yt.title,
+                'duration': yt.length,
+                'uploader': yt.author,
+                'view_count': yt.views,
+                'like_count': 0,
+                'thumbnail': yt.thumbnail_url,
+                'url': url,
+                '_source': 'pytubefix'
+            }
+    except Exception as e:
+        print(f"[WARN] pytubefix primary extract failed: {e}")
 
     # 4-urinish: yt-dlp zaxirasi
     opts_primary = {
@@ -214,72 +214,51 @@ async def trim_video(url: str, start_sec: int, end_sec: int, quality: str = "720
 
 
 def _download_media_sync(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:
-    """Videoni yoki audioni yuklab olish (pytubefix default va MWEB zaxirasi bilan)."""
-    # 1-urinish: pytubefix (default client)
-    try:
-        yt = YouTube(url)
-        video_id = yt.video_id
-        title = yt.title
+    """Videoni yoki audioni yuklab olish (MWEB, WEB, IOS, ANDROID pytubefix miyasi bilan)."""
+    clients = ['MWEB', 'WEB', 'IOS', 'ANDROID']
+    title = "YouTube Video"
 
-        if mode == "audio":
-            stream = yt.streams.get_audio_only()
-            target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp3")
-            return target_file, title, "SUCCESS"
-        else:
-            target_res = f"{quality}p" if quality.isdigit() else "720p"
-            streams = yt.streams.filter(file_extension='mp4')
-            stream = streams.filter(res=target_res, progressive=True).first()
-            if not stream:
-                stream = streams.filter(progressive=True).get_highest_resolution()
-            if not stream:
-                stream = streams.filter(res=target_res).first()
-            if not stream:
-                stream = streams.first()
+    for c in clients:
+        try:
+            yt = YouTube(url, client=c)
+            video_id = yt.video_id
+            title = yt.title or title
 
-            if stream:
-                target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp4")
-                file_size = os.path.getsize(target_file)
-                if file_size > 50 * 1024 * 1024:
-                    os.remove(target_file)
-                    return None, title, "TOO_LARGE"
-                return target_file, title, "SUCCESS"
+            if mode == "audio":
+                audio_stream = yt.streams.filter(only_audio=True).first()
+                if not audio_stream:
+                    audio_stream = yt.streams.get_audio_only()
+                if audio_stream:
+                    target_file = audio_stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp3")
+                    return target_file, title, "SUCCESS"
+            else:
+                target_res = f"{quality}p" if quality.isdigit() else "720p"
+                # 1. Tanlangan sifatli progressive stream
+                stream = yt.streams.filter(res=target_res, progressive=True).first()
+                # 2. Har qanday mp4 progressive stream
+                if not stream:
+                    stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+                # 3. Har qanday progressive stream
+                if not stream:
+                    stream = yt.streams.filter(progressive=True).first()
+                # 4. Tanlangan sifatli har qanday stream
+                if not stream:
+                    stream = yt.streams.filter(res=target_res).first()
+                # 5. Har qanday birinchi stream
+                if not stream:
+                    stream = yt.streams.first()
 
-    except Exception as ex:
-        print(f"[WARN] pytubefix default download failed, trying pytubefix MWEB: {ex}")
+                if stream:
+                    target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp4")
+                    file_size = os.path.getsize(target_file)
+                    if file_size > 50 * 1024 * 1024:
+                        os.remove(target_file)
+                        return None, title, "TOO_LARGE"
+                    return target_file, title, "SUCCESS"
+        except Exception as ex:
+            print(f"[WARN] pytubefix client {c} download failed: {ex}")
 
-    # 2-urinish: pytubefix (MWEB client)
-    try:
-        yt = YouTube(url, client='MWEB')
-        video_id = yt.video_id
-        title = yt.title
-
-        if mode == "audio":
-            stream = yt.streams.get_audio_only()
-            target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp3")
-            return target_file, title, "SUCCESS"
-        else:
-            target_res = f"{quality}p" if quality.isdigit() else "720p"
-            streams = yt.streams.filter(file_extension='mp4')
-            stream = streams.filter(res=target_res, progressive=True).first()
-            if not stream:
-                stream = streams.filter(progressive=True).get_highest_resolution()
-            if not stream:
-                stream = streams.filter(res=target_res).first()
-            if not stream:
-                stream = streams.first()
-
-            if stream:
-                target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp4")
-                file_size = os.path.getsize(target_file)
-                if file_size > 50 * 1024 * 1024:
-                    os.remove(target_file)
-                    return None, title, "TOO_LARGE"
-                return target_file, title, "SUCCESS"
-
-    except Exception as ex:
-        print(f"[WARN] pytubefix MWEB download failed, trying yt-dlp: {ex}")
-
-    # 3-urinish: yt-dlp fallback
+    # 5-urinish (Zaxira): yt-dlp fallback
     outtmpl = os.path.join(DOWNLOAD_DIR, '%(id)s_%(ext)s.%(ext)s')
     common_opts = {
         'outtmpl': outtmpl,
@@ -341,7 +320,7 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
     except Exception as e:
         print(f"[ERROR] yt-dlp download failed: {e}")
 
-    return None, "", "Faylni yuklab bo'lmadi."
+    return None, title, "Faylni yuklab bo'lmadi."
 
 
 async def download_media(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:

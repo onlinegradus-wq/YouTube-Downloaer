@@ -45,6 +45,16 @@ dp = Dispatcher()
 url_cache = {}
 
 
+def clean_youtube_url(url: str) -> str:
+    """YouTube havolasidan ortiqcha &list=..., &index=... kabi parametrlarni olib tashlab toza video havolasi hosil qilish."""
+    url = url.strip()
+    v_match = re.search(r'(?:v=|shorts/|youtu\.be/)([\w-]+)', url)
+    if v_match:
+        video_id = v_match.group(1)
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return url
+
+
 class TrimState(StatesGroup):
     waiting_for_range = State()
 
@@ -315,7 +325,8 @@ async def handle_youtube_link(message: Message):
         await message.answer("⚠️ **Botdan foydalanish uchun rasmiy kanalimizga obuna bo'ling!**", reply_markup=builder.as_markup(), parse_mode="Markdown")
         return
 
-    url = message.text.strip()
+    raw_url = message.text.strip()
+    url = clean_youtube_url(raw_url)
     status_msg = await message.answer("🔍 Video ma'lumotlari olinmoqda, biroz kuting...")
 
     try:

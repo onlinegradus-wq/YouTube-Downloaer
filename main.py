@@ -14,9 +14,10 @@ if hasattr(sys.stderr, 'reconfigure'):
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import (
-    Message, CallbackQuery, InlineKeyboardButton, FSInputFile
+    Message, CallbackQuery, InlineKeyboardButton, FSInputFile,
+    ReplyKeyboardMarkup, KeyboardButton
 )
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from config import BOT_TOKEN
 from downloader import get_video_info, download_media, cleanup_file
@@ -35,13 +36,27 @@ dp = Dispatcher()
 url_cache = {}
 
 
+def get_main_menu():
+    """Asosiy doimiy pastki menyu tugmalari."""
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="📥 Yo'riqnoma"),
+        KeyboardButton(text="ℹ️ Bot Haqida")
+    )
+    builder.row(
+        KeyboardButton(text="⚙️ Sozlamalar"),
+        KeyboardButton(text="📞 Qo'llab-quvvatlash")
+    )
+    return builder.as_markup(resize_keyboard=True)
+
+
 async def handle_ping(request):
     """Render uchun HTTP health check handler."""
     return web.Response(text="Bot is running! 🚀")
 
 
 async def start_health_check_server():
-    """Render Web Service talab qiladigan portni ochish."""
+    """Render Web Service portini ochish."""
     port = int(os.getenv("PORT", 8080))
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -62,20 +77,59 @@ async def cmd_start(message: Message):
         "Sizga video sifatini (1080p, 720p, 480p, 360p) yoki MP3 audioni tanlash imkonini beraman.\n\n"
         "💡 *Masalan:* `https://www.youtube.com/watch?v=dQw4w9WgXcQ`"
     )
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
 
+@dp.message(F.text == "📥 Yo'riqnoma")
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
-    """/help buyrug'i uchun handler."""
+    """Yo'riqnoma handler."""
     text = (
-        "📖 **Yordam va Yo'riqnoma:**\n\n"
+        "📖 **Yo'riqnoma:**\n\n"
         "1️⃣ YouTube ilovasi yoki saytidan video havolasini nusxalang (*Copy Link*).\n"
         "2️⃣ Havolani shu botga yuboring.\n"
         "3️⃣ Kerakli sifatni tanlang (1080p, 720p, 480p, 360p yoki Audio MP3).\n\n"
-        "⚠️ *Eslatma:* Telegram Bot API cheklovi sababli 50 MB dan katta fayllarni yuborib bo'lmaydi."
+        "⚠️ *Eslatma:* Telegram Bot API cheklovi sababli 50 MB dan kichik fayllar yuboriladi."
     )
-    await message.answer(text, parse_mode="Markdown")
+    await message.answer(text, reply_markup=get_main_menu(), parse_mode="Markdown")
+
+
+@dp.message(F.text == "ℹ️ Bot Haqida")
+async def cmd_about(message: Message):
+    """Bot haqida handler."""
+    text = (
+        "ℹ️ **Bot Haqida Ma'lumot:**\n\n"
+        "🚀 Ushbu bot YouTube videolarini hamda MP3 audiolarni sifatli va tezkor yuklab beradi.\n\n"
+        "✨ **Imkoniyatlar:**\n"
+        "• 🎬 Video sifatlari: 1080p (Full HD), 720p (HD), 480p, 360p\n"
+        "• 🎵 Audio MP3 formatida yuklash\n"
+        "• 📱 YouTube Shorts videolarini qo'llab-quvvatlash\n"
+        "• ⚡️ H.264 (avc1) kodek - to'g'ridan-to'g'ri Telegram pleyerida tiniq ijro etish"
+    )
+    await message.answer(text, reply_markup=get_main_menu(), parse_mode="Markdown")
+
+
+@dp.message(F.text == "⚙️ Sozlamalar")
+async def cmd_settings(message: Message):
+    """Sozlamalar handler."""
+    text = (
+        "⚙️ **Sozlamalar va Maslahatlar:**\n\n"
+        "• **Maksimal hajm:** Telegram boti orqali 50 MB gacha bo'lgan fayllarni yuklash mumkin.\n"
+        "• **Tezkor yuklash:** Agar internetingiz sekin bo'lsa, 480p yoki 360p sifatni tanlashingiz tavsiya etiladi.\n"
+        "• **Avtomatik format:** Barcha videolar Telegram pleyerida mos keluvchi MP4 formatida tayyorlanadi."
+    )
+    await message.answer(text, reply_markup=get_main_menu(), parse_mode="Markdown")
+
+
+@dp.message(F.text == "📞 Qo'llab-quvvatlash")
+async def cmd_support(message: Message):
+    """Qo'llab-quvvatlash handler."""
+    text = (
+        "📞 **Qo'llab-quvvatlash va Aloqa:**\n\n"
+        "Agar bot ishlashida qandaydir taklif yoki savollaringiz bo'lsa, administrator bilan bog'lanishingiz mumkin.\n\n"
+        "🤖 *YouTube Downloader Bot v2.0*"
+    )
+    await message.answer(text, reply_markup=get_main_menu(), parse_mode="Markdown")
 
 
 @dp.message(F.text.regexp(YOUTUBE_REGEX))
@@ -233,7 +287,6 @@ async def main():
         print("="*60 + "\n")
         return
 
-    # Render Web Service port talabini qondirish
     await start_health_check_server()
 
     print("🚀 Telegram bot ishga tushmoqda...")

@@ -1,0 +1,7 @@
+# Maxfiy va vaqtinchalik fayllarni ignore qilish
+.env
+downloads/
+__pycache__/
+*.pyc
+.venv/
+env/

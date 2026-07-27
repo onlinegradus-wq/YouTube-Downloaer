@@ -29,7 +29,7 @@ COMMON_YOUTUBE_OPTS = {
 
 def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
     """YouTube videosi ma'lumotlarini olish (pytubefix birinchi, yt-dlp zaxira)."""
-    # 1-urinish: pytubefix (Bulutli server IP bloklarini 100% aylanib o'tadi)
+    # 1-urinish: pytubefix (default client)
     try:
         yt = YouTube(url)
         video_id = yt.video_id
@@ -48,7 +48,26 @@ def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[WARN] pytubefix primary extract failed: {e}")
 
-    # 2-urinish: yt-dlp zaxirasi
+    # 2-urinish: pytubefix (MWEB client)
+    try:
+        yt = YouTube(url, client='MWEB')
+        video_id = yt.video_id
+        if video_id and yt.title:
+            return {
+                'id': video_id,
+                'title': yt.title,
+                'duration': yt.length,
+                'uploader': yt.author,
+                'view_count': yt.views,
+                'like_count': 0,
+                'thumbnail': yt.thumbnail_url,
+                'url': url,
+                '_source': 'pytubefix_mweb'
+            }
+    except Exception as e:
+        print(f"[WARN] pytubefix mweb extract failed: {e}")
+
+    # 3-urinish: yt-dlp zaxirasi
     opts_primary = {
         'quiet': True,
         'no_warnings': True,
@@ -167,8 +186,8 @@ async def trim_video(url: str, start_sec: int, end_sec: int, quality: str = "720
 
 
 def _download_media_sync(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:
-    """Videoni yoki audioni yuklab olish (pytubefix birinchi)."""
-    # 1-urinish: pytubefix (Bulutli server IP bloklarini 100% aylanib o'tadi)
+    """Videoni yoki audioni yuklab olish (pytubefix default va MWEB zaxirasi bilan)."""
+    # 1-urinish: pytubefix (default client)
     try:
         yt = YouTube(url)
         video_id = yt.video_id
@@ -198,9 +217,41 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
                 return target_file, title, "SUCCESS"
 
     except Exception as ex:
-        print(f"[WARN] pytubefix download failed, switching to yt-dlp: {ex}")
+        print(f"[WARN] pytubefix default download failed, trying pytubefix MWEB: {ex}")
 
-    # 2-urinish: yt-dlp fallback
+    # 2-urinish: pytubefix (MWEB client)
+    try:
+        yt = YouTube(url, client='MWEB')
+        video_id = yt.video_id
+        title = yt.title
+
+        if mode == "audio":
+            stream = yt.streams.get_audio_only()
+            target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp3")
+            return target_file, title, "SUCCESS"
+        else:
+            target_res = f"{quality}p" if quality.isdigit() else "720p"
+            streams = yt.streams.filter(file_extension='mp4')
+            stream = streams.filter(res=target_res, progressive=True).first()
+            if not stream:
+                stream = streams.filter(progressive=True).get_highest_resolution()
+            if not stream:
+                stream = streams.filter(res=target_res).first()
+            if not stream:
+                stream = streams.first()
+
+            if stream:
+                target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp4")
+                file_size = os.path.getsize(target_file)
+                if file_size > 50 * 1024 * 1024:
+                    os.remove(target_file)
+                    return None, title, "TOO_LARGE"
+                return target_file, title, "SUCCESS"
+
+    except Exception as ex:
+        print(f"[WARN] pytubefix MWEB download failed, trying yt-dlp: {ex}")
+
+    # 3-urinish: yt-dlp fallback
     outtmpl = os.path.join(DOWNLOAD_DIR, '%(id)s_%(ext)s.%(ext)s')
     common_opts = {
         'outtmpl': outtmpl,

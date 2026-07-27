@@ -13,49 +13,41 @@ try:
 except Exception as e:
     print(f"[WARN] imageio_ffmpeg topilmadi yoki yuklanmadi: {e}")
 
-COMMON_YOUTUBE_OPTS = {
-    'quiet': True,
-    'no_warnings': True,
-    'nocheckcertificate': True,
-    'socket_timeout': 30,
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['android_vr', 'web_embedded', 'mweb', 'android', 'ios', 'web']
-        }
-    }
-}
-
 
 def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
-    """YouTube videosi haqida ma'lumotlarni 2 bosqichli zaxira bilan olish."""
-    # 1-urinish: Standart ma'lumot yig'ish
-    ydl_opts = {
-        **COMMON_YOUTUBE_OPTS,
+    """YouTube videosi haqida ma'lumotlarni o'ta ishonchli va tezkor olish."""
+    opts_primary = {
+        'quiet': True,
+        'no_warnings': True,
         'skip_download': True,
         'noplaylist': True,
         'socket_timeout': 15,
+        'nocheckcertificate': True,
     }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(opts_primary) as ydl:
             info = ydl.extract_info(url, download=False)
             if info and ('title' in info or 'id' in info):
                 return info
     except Exception as e:
-        print(f"[WARN] Standard extract_info failed: {e}")
+        print(f"[WARN] Primary extract_info failed: {e}")
 
-    # 2-urinish: Flat mode zaxirasi
-    ydl_opts_flat = {
-        **COMMON_YOUTUBE_OPTS,
-        'skip_download': True,
-        'extract_flat': 'in_playlist',
-        'noplaylist': True,
+    # Fallback zaxirasi
+    opts_fallback = {
+        'quiet': True,
+        'no_warnings': True,
         'socket_timeout': 15,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['mweb', 'android', 'web']
+            }
+        }
     }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts_flat) as ydl:
+        with yt_dlp.YoutubeDL(opts_fallback) as ydl:
             return ydl.extract_info(url, download=False)
     except Exception as e:
-        print(f"[ERROR] Flat extract_info failed: {e}")
+        print(f"[ERROR] Fallback extract_info failed: {e}")
         return None
 
 
@@ -73,9 +65,17 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
     outtmpl = os.path.join(DOWNLOAD_DIR, '%(id)s_%(ext)s.%(ext)s')
 
     common_opts = {
-        **COMMON_YOUTUBE_OPTS,
         'outtmpl': outtmpl,
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'socket_timeout': 30,
         'max_filesize': 50 * 1024 * 1024,  # Telegram bot API max 50MB
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['mweb', 'android', 'web']
+            }
+        }
     }
 
     if mode == "audio":
@@ -113,7 +113,7 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
-                return None, "", "Video ma'lumotlarini yuklab bo'mbadi."
+                return None, "", "Video ma'lumotlarini yuklab bo'lmadi."
 
             title = info.get('title', 'YouTube Media')
             video_id = info.get('id')

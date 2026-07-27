@@ -337,7 +337,10 @@ async def handle_youtube_link(message: Message):
         return
 
     if not info:
-        await status_msg.edit_text("❌ **Xatolik:** Ushbu video YouTube'da mavjud emas yoki havola noto'g'ri.")
+        await status_msg.edit_text(
+            "⚠️ **Xatolik:** Ushbu video YouTube'da mavjud emas, o'chirilgan yoki private bo'lishi mumkin.\n"
+            "Boshqa faol YouTube havolasini sinab ko'ring."
+        )
         return
 
     video_id = info.get('id')
@@ -453,7 +456,12 @@ async def handle_download_callback(callback: CallbackQuery):
         return
 
     if status != "SUCCESS" or not file_path:
-        await status_msg.edit_text(f"❌ **Xatolik:** Faylni yuklab bo'lmadi.\n{status}", parse_mode="Markdown")
+        await status_msg.edit_text(
+            "⚠️ **Xatolik:** Ushbu faylni yuklab bo'lmadi.\n"
+            "Video YouTube'da o'chirilgan, yopiq yoki mualliflik huquqi bilan cheklangan bo'lishi mumkin.\n"
+            "Boshqa faol YouTube havolasini sinab ko'ring.",
+            parse_mode="Markdown"
+        )
         return
 
     try:

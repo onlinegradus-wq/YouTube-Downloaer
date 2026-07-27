@@ -72,11 +72,14 @@ async def handle_youtube_link(message: Message):
         return
     except Exception as e:
         logger.error(f"Error getting video info: {e}")
-        await status_msg.edit_text(f"❌ **Xatolik:** Video ma'lumotlarini olishda xatolik: {e}")
+        await status_msg.edit_text(f"❌ **Xatolik:** Video ma'lumotlarini olishda xatolik yuz berdi: {e}")
         return
 
     if not info:
-        await status_msg.edit_text("❌ **Xatolik:** Video ma'lumotlarini olib bo'lmadi. Havolani tekshirib qayta yuboring.")
+        await status_msg.edit_text(
+            "❌ **Xatolik:** Ushbu video YouTube'da mavjud emas (o'chirilgan, yopiq/private video) yoki havola noto'g'ri.\n"
+            "Boshqa faol YouTube havolasini sinab ko'ring."
+        )
         return
 
     video_id = info.get('id')
@@ -149,7 +152,6 @@ async def handle_download_callback(callback: CallbackQuery):
     )
 
     try:
-        # Yuklash va qayta ishlash uchun 180 soniya (3 daqiqa) kutish vaqti
         file_path, title, status = await asyncio.wait_for(
             download_media(url, mode=mode, quality=quality),
             timeout=180.0

@@ -3,6 +3,7 @@ import os
 import sys
 import re
 import logging
+from aiohttp import web
 
 # Windows konsol kodirovkasini sozlash
 if hasattr(sys.stdout, 'reconfigure'):
@@ -32,6 +33,24 @@ dp = Dispatcher()
 
 # YouTube URL larini saqlash uchun vaqtinchalik xotira (video_id -> url)
 url_cache = {}
+
+
+async def handle_ping(request):
+    """Render uchun HTTP health check handler."""
+    return web.Response(text="Bot is running! 🚀")
+
+
+async def start_health_check_server():
+    """Render Web Service talab qiladigan portni ochish."""
+    port = int(os.getenv("PORT", 8080))
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"🌐 Health check web server started on port {port}")
 
 
 @dp.message(CommandStart())
@@ -209,10 +228,13 @@ async def handle_download_callback(callback: CallbackQuery):
 async def main():
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
         print("\n" + "="*60)
-        print("⚠️  DIQQAT: BOT_TOKEN o'rnatilmagan!")
+        print("⚠️ DIQQAT: BOT_TOKEN o'rnatilmagan!")
         print("Iltimos, '.env' fayliga Telegram bot tokeningizni kiriting.")
         print("="*60 + "\n")
         return
+
+    # Render Web Service port talabini qondirish
+    await start_health_check_server()
 
     print("🚀 Telegram bot ishga tushmoqda...")
     await dp.start_polling(bot)

@@ -3,6 +3,8 @@ import os
 import sys
 import re
 import logging
+import urllib.request
+import json
 from aiohttp import web
 
 # Windows konsol kodirovkasini sozlash
@@ -29,7 +31,7 @@ from database import (
 )
 from downloader import (
     get_video_info, download_media, cleanup_file,
-    search_youtube, download_subtitles, trim_video
+    search_youtube, download_subtitles
 )
 
 # Logging sozlamalari
@@ -53,10 +55,6 @@ def clean_youtube_url(url: str) -> str:
         video_id = v_match.group(1)
         return f"https://www.youtube.com/watch?v={video_id}"
     return url
-
-
-class TrimState(StatesGroup):
-    waiting_for_range = State()
 
 
 class BroadcastState(StatesGroup):
@@ -289,7 +287,6 @@ async def cmd_about(message: Message):
         "✨ **Imkoniyatlar:**\n"
         "• 🎬 Video sifatlari: 1080p (Full HD), 720p (HD), 480p, 360p\n"
         "• 🎵 Audio MP3 formatida yuklash\n"
-        "• ✂️ Videolarni istalgan qismini qirqib yuklash\n"
         "• 📝 Subtitrlarni (.srt/.txt) yuklab olish\n"
         "• ⚡️ H.264 (avc1) kodek - Telegram pleyerida tiniq ijro"
     )
@@ -382,9 +379,6 @@ async def handle_youtube_link(message: Message):
         InlineKeyboardButton(text="🎵 Audio (MP3)", callback_data=f"dl:audio:mp3:{video_id}"),
         InlineKeyboardButton(text="📝 Subtitr", callback_data=f"sub:{video_id}")
     )
-    builder.row(
-        InlineKeyboardButton(text="✂️ Videoni Qirqish", callback_data=f"trim_init:{video_id}")
-    )
 
     await status_msg.delete()
 
@@ -419,72 +413,6 @@ async def handle_subtitles_callback(callback: CallbackQuery):
         await status_msg.delete()
     except Exception as e:
         await status_msg.edit_text(f"❌ **Xatolik:** {e}")
-    finally:
-        cleanup_file(file_path)
-
-
-@dp.callback_query(F.data.startswith("trim_init:"))
-async def handle_trim_init_callback(callback: CallbackQuery, state: FSMContext):
-    """Video qirqish rejimini boshlash."""
-    video_id = callback.data.split(":")[1]
-    url = url_cache.get(video_id, f"https://www.youtube.com/watch?v={video_id}")
-
-    await state.set_state(TrimState.waiting_for_range)
-    await state.update_data(trim_url=url, trim_video_id=video_id)
-
-    await callback.message.answer(
-        "✂️ **Videoni Qirqish:**\n\n"
-        "Qirqmoqchi bo'lgan vaqt oralig'ingizni soniyalarda yoki daqiqalarda yozing.\n"
-        "💡 *Masalan:* `01:00-02:30` yoki `10-90`",
-        parse_mode="Markdown"
-    )
-    await callback.answer()
-
-
-@dp.message(TrimState.waiting_for_range)
-async def process_trim_range(message: Message, state: FSMContext):
-    """Qirqish vaqt oralig'ini qabul qilish va yuklash."""
-    data = await state.get_data()
-    url = data.get("trim_url")
-    await state.clear()
-
-    pattern = r'(\d+:\d+|\d+)-(\d+:\d+|\d+)'
-    match = re.search(pattern, message.text.strip())
-
-    if not match:
-        await message.answer("❌ Noto'g'ri format. Masalan: `01:00-02:30` yoki `10-90` formatida yozing.")
-        return
-
-    start_str, end_str = match.groups()
-
-    def parse_sec(s: str) -> int:
-        if ':' in s:
-            m, sec = s.split(':')
-            return int(m) * 60 + int(sec)
-        return int(s)
-
-    start_sec = parse_sec(start_str)
-    end_sec = parse_sec(end_str)
-
-    if start_sec >= end_sec:
-        await message.answer("❌ Boshlanish vaqti tugash vaqtidan kichik bo'lishi kerak.")
-        return
-
-    status_msg = await message.answer(f"⏳ **Video qirqilmoqda ({start_str} -> {end_str})...**\n*Biroz kuting...*")
-
-    file_path, title, status = await trim_video(url, start_sec, end_sec, quality="720")
-
-    if status != "SUCCESS" or not file_path:
-        await status_msg.edit_text(f"❌ **Qirqishda xatolik:** {status}")
-        return
-
-    try:
-        await status_msg.edit_text("📤 **Telegram'ga yuklanmoqda...**")
-        input_file = FSInputFile(file_path)
-        await message.answer_video(video=input_file, caption=f"✂️ **{title}**\n⏱ {start_str} - {end_str}")
-        await status_msg.delete()
-    except Exception as e:
-        await status_msg.edit_text(f"❌ **Yuborishda xatolik:** {e}")
     finally:
         cleanup_file(file_path)
 

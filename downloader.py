@@ -177,45 +177,6 @@ async def download_subtitles(url: str) -> Tuple[Optional[str], str]:
     return await asyncio.to_thread(_download_subtitles_sync, url)
 
 
-def _trim_video_sync(url: str, start_sec: int, end_sec: int, quality: str = "720") -> Tuple[Optional[str], str, str]:
-    """Videoni ko'rsatilgan vaqt oralig'ida (start_sec -> end_sec) qirqib yuklash."""
-    outtmpl = os.path.join(DOWNLOAD_DIR, '%(id)s_trim_%(ext)s.%(ext)s')
-    h = quality if quality.isdigit() else "720"
-    fmt = (
-        f'bestvideo[height<={h}][vcodec^=avc1][filesize<=50M]+bestaudio[acodec^=mp4a]/'
-        f'best[height<={h}][vcodec^=avc1][filesize<=50M]/'
-        f'best[height<={h}]/b'
-    )
-    ydl_opts = {
-        **COMMON_YOUTUBE_OPTS,
-        'outtmpl': outtmpl,
-        'format': fmt,
-        'download_ranges': yt_dlp.utils.download_range_func(None, [(start_sec, end_sec)]),
-        'force_keyframes_at_cuts': True,
-    }
-    if FFMPEG_PATH:
-        ydl_opts['ffmpeg_location'] = FFMPEG_PATH
-        ydl_opts['merge_output_format'] = 'mp4'
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            video_id = info.get('id')
-            title = info.get('title', 'Trimmed Video')
-            pattern = os.path.join(DOWNLOAD_DIR, f"{video_id}_trim_*")
-            files = glob.glob(pattern)
-            if files:
-                return files[0], title, "SUCCESS"
-            return None, title, "Qirqilgan fayl topilmadi."
-    except Exception as e:
-        return None, "", f"Qirqishda xatolik: {e}"
-
-
-async def trim_video(url: str, start_sec: int, end_sec: int, quality: str = "720") -> Tuple[Optional[str], str, str]:
-    """Videoni asinxron qirqib yuklash."""
-    return await asyncio.to_thread(_trim_video_sync, url, start_sec, end_sec, quality)
-
-
 def _download_media_sync(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:
     """Videoni yoki audioni yuklab olish (MWEB, WEB, IOS, ANDROID pytubefix va yt-dlp cookie bilan)."""
     clients = ['MWEB', 'WEB', 'IOS', 'ANDROID']

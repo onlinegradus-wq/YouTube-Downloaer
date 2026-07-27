@@ -20,7 +20,7 @@ COMMON_YOUTUBE_OPTS = {
     'socket_timeout': 30,
     'extractor_args': {
         'youtube': {
-            'player_client': ['mweb', 'android', 'web', 'ios', 'tv']
+            'player_client': ['android_vr', 'web_embedded', 'mweb', 'android', 'ios', 'web']
         }
     }
 }
@@ -113,7 +113,7 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
-                return None, "", "Video ma'lumotlarini yuklab bo'lmadi."
+                return None, "", "Video ma'lumotlarini yuklab bo'mbadi."
 
             title = info.get('title', 'YouTube Media')
             video_id = info.get('id')

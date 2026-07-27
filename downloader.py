@@ -3,6 +3,7 @@ import os
 import glob
 from typing import Dict, Any, Optional, Tuple, List
 import yt_dlp
+from pytubefix import YouTube
 from config import DOWNLOAD_DIR
 
 # imageio_ffmpeg orqali avtomatik FFmpeg joylashuvini aniqlash
@@ -11,7 +12,7 @@ try:
     import imageio_ffmpeg
     FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 except Exception as e:
-    print(f"[WARN] imageio_ffmpeg topilmadi yoki yuklanmadi: {e}")
+    print(f"[WARN] imageio_ffmpeg topilmadi: {e}")
 
 COMMON_YOUTUBE_OPTS = {
     'quiet': True,
@@ -20,14 +21,15 @@ COMMON_YOUTUBE_OPTS = {
     'socket_timeout': 30,
     'extractor_args': {
         'youtube': {
-            'player_client': ['mweb', 'android', 'web']
+            'player_client': ['mweb', 'android_vr', 'web_embedded', 'android', 'ios']
         }
     }
 }
 
 
 def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
-    """YouTube videosi haqida ma'lumotlarni ishonchli va tezkor olish."""
+    """YouTube videosi haqida ma'lumotlarni 3 bosqichli (yt-dlp + pytubefix) zaxira bilan olish."""
+    # 1-bosqich: Fast yt-dlp
     opts_primary = {
         'quiet': True,
         'no_warnings': True,
@@ -44,22 +46,40 @@ def _extract_info_sync(url: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[WARN] Primary extract_info failed: {e}")
 
+    # 2-bosqich: yt-dlp mobile/embedded player client
     opts_fallback = {
-        'quiet': True,
-        'no_warnings': True,
+        **COMMON_YOUTUBE_OPTS,
+        'skip_download': True,
+        'noplaylist': True,
         'socket_timeout': 15,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['mweb', 'android', 'web']
-            }
-        }
     }
     try:
         with yt_dlp.YoutubeDL(opts_fallback) as ydl:
-            return ydl.extract_info(url, download=False)
+            info = ydl.extract_info(url, download=False)
+            if info:
+                return info
     except Exception as e:
-        print(f"[ERROR] Fallback extract_info failed: {e}")
-        return None
+        print(f"[WARN] Fallback extract_info failed: {e}")
+
+    # 3-bosqich: pytubefix fallback (Bulutli server IP bloklarini aylanib o'tuvchi dvigatel)
+    try:
+        yt = YouTube(url)
+        video_id = yt.video_id
+        return {
+            'id': video_id,
+            'title': yt.title,
+            'duration': yt.length,
+            'uploader': yt.author,
+            'view_count': yt.views,
+            'like_count': 0,
+            'thumbnail': yt.thumbnail_url,
+            'url': url,
+            '_source': 'pytubefix'
+        }
+    except Exception as e:
+        print(f"[ERROR] pytubefix extract_info failed: {e}")
+
+    return None
 
 
 async def get_video_info(url: str) -> Optional[Dict[str, Any]]:
@@ -160,7 +180,7 @@ async def trim_video(url: str, start_sec: int, end_sec: int, quality: str = "720
 
 
 def _download_media_sync(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:
-    """Videoni yoki audioni sinxron yuklab olish."""
+    """Videoni yoki audioni sinxron yuklab olish (yt-dlp va pytubefix zaxirasi bilan)."""
     outtmpl = os.path.join(DOWNLOAD_DIR, '%(id)s_%(ext)s.%(ext)s')
 
     common_opts = {
@@ -169,10 +189,10 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
         'no_warnings': True,
         'nocheckcertificate': True,
         'socket_timeout': 30,
-        'max_filesize': 50 * 1024 * 1024,  # Telegram bot API max 50MB
+        'max_filesize': 50 * 1024 * 1024,
         'extractor_args': {
             'youtube': {
-                'player_client': ['mweb', 'android', 'web']
+                'player_client': ['mweb', 'android_vr', 'web_embedded', 'android', 'ios']
             }
         }
     }
@@ -207,34 +227,47 @@ def _download_media_sync(url: str, mode: str = "video", quality: str = "720") ->
             ydl_opts['ffmpeg_location'] = FFMPEG_PATH
             ydl_opts['merge_output_format'] = 'mp4'
 
+    # 1-urinish: yt-dlp
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            if not info:
-                return None, "", "Video ma'lumotlarini yuklab bo'lmadi."
+            if info:
+                title = info.get('title', 'YouTube Media')
+                video_id = info.get('id')
 
-            title = info.get('title', 'YouTube Media')
-            video_id = info.get('id')
+                pattern = os.path.join(DOWNLOAD_DIR, f"{video_id}_*")
+                matching_files = glob.glob(pattern)
 
-            pattern = os.path.join(DOWNLOAD_DIR, f"{video_id}_*")
-            matching_files = glob.glob(pattern)
-
-            if matching_files:
-                target_file = matching_files[0]
-                file_size = os.path.getsize(target_file)
-                if file_size > 50 * 1024 * 1024:
-                    os.remove(target_file)
-                    return None, title, "TOO_LARGE"
-                return target_file, title, "SUCCESS"
-
-            return None, title, "Fayl topilmadi."
-
+                if matching_files:
+                    target_file = matching_files[0]
+                    file_size = os.path.getsize(target_file)
+                    if file_size > 50 * 1024 * 1024:
+                        os.remove(target_file)
+                        return None, title, "TOO_LARGE"
+                    return target_file, title, "SUCCESS"
     except Exception as e:
-        err_str = str(e)
-        print(f"[ERROR] download_media: {err_str}")
-        if "File is larger than max_filesize" in err_str or "max_filesize" in err_str:
-            return None, "", "TOO_LARGE"
-        return None, "", f"Xatolik: {err_str[:100]}"
+        print(f"[WARN] yt-dlp download failed, switching to pytubefix: {e}")
+
+    # 2-urinish (Zaxira): pytubefix
+    try:
+        yt = YouTube(url)
+        video_id = yt.video_id
+        title = yt.title
+
+        if mode == "audio":
+            stream = yt.streams.get_audio_only()
+            target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp3")
+            return target_file, title, "SUCCESS"
+        else:
+            stream = yt.streams.filter(progressive=True, file_extension='mp4').get_highest_resolution()
+            if not stream:
+                stream = yt.streams.filter(file_extension='mp4').first()
+            target_file = stream.download(output_path=DOWNLOAD_DIR, filename=f"{video_id}.mp4")
+            return target_file, title, "SUCCESS"
+
+    except Exception as ex:
+        print(f"[ERROR] pytubefix download failed: {ex}")
+        return None, "", f"Xatolik: {ex}"
 
 
 async def download_media(url: str, mode: str = "video", quality: str = "720") -> Tuple[Optional[str], str, str]:
